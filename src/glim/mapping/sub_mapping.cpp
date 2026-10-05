@@ -493,7 +493,7 @@ SubMap::Ptr SubMapping::create_submap(bool force_create) const {
 #endif
 
   if (submap->frame == nullptr) {
-    submap->frame = gtsam_points::merge_frames(poses_to_merge, keyframes_to_merge, params.submap_downsample_resolution, params.submap_target_num_points);
+    submap->frame = gtsam_points::merge_frames(poses_to_merge, keyframes_to_merge, params.submap_downsample_resolution);
   }
   logger->debug("|merged_submap|={}", submap->frame->size());
 

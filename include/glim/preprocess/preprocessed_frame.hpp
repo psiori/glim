@@ -25,6 +25,7 @@ public:
 public:
   double stamp;          // Timestamp at the beginning of the scan
   double scan_end_time;  // Timestamp at the end of the scan
+  double full_scan_duration = 0.0;  // Full spin duration for CT interpolation (0 = use last point time)
 
   std::vector<double> times;            // Point timestamps w.r.t. the first pt
   std::vector<double> intensities;      // Point intensities

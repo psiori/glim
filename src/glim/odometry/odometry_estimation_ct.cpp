@@ -127,7 +127,10 @@ EstimationFrame::ConstPtr OdometryEstimationCT::insert_frame(const PreprocessedF
     gtsam::Vector6 last_twist = gtsam::Vector6::Zero();
     if (current >= 2) {
       if (!frames[last] || !frames[last - 1]) {
-        logger->warn("neither frames[last]={} nor frames[last - 1]={} is released!!", fmt::ptr(frames[last]), fmt::ptr(frames[last - 1]));
+        logger->warn(
+          "neither frames[last]={} nor frames[last - 1]={} is released!!",
+          static_cast<const void*>(frames[last].get()),
+          static_cast<const void*>(frames[last - 1].get()));
         logger->warn("there might be a large time gap between point cloud frames");
       } else {
         const double delta_time = (frames[last]->stamp + frames[last]->frame->times[frames[last]->frame->size() - 1]) - frames[last - 1]->stamp;
@@ -160,6 +163,10 @@ EstimationFrame::ConstPtr OdometryEstimationCT::insert_frame(const PreprocessedF
       gtsam::make_shared<gtsam_points::IntegratedCT_GICPFactor_<gtsam_points::iVox, gtsam_points::PointCloud>>(X(current), Y(current), target_ivox, new_frame->frame, target_ivox);
     factor->set_num_threads(params.num_threads);
     factor->set_max_correspondence_distance(params.max_correspondence_distance);
+    {
+      const double t_end = raw_frame->full_scan_duration > 0.0 ? raw_frame->full_scan_duration : raw_frame->times.back();
+      factor->set_time_span(0.0, t_end);
+    }
     graph.add(factor);
 
     // Location consistency & constant velocity constraints

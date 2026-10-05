@@ -17,6 +17,8 @@ endif()
 option(BUILD_WITH_CUDA "Build with GPU support" ON)
 option(BUILD_WITH_CUDA_MULTIARCH "Build with GPU cross-platform support" OFF)
 option(BUILD_WITH_VIEWER "Build with visualizer" ON)
+option(BUILD_GLIM_CLOUD_FUSION "Build glim_cloud_fusion library" ON)
+option(BUILD_GLIM_CLOUD_FUSION_TESTS "Build glim_cloud_fusion tests" ON)
 option(BUILD_WITH_MARCH_NATIVE "Build with -march=native" OFF)
 option(BUILD_WITH_OPENCV "Build with OpenCV to support camera images" ON)
 
@@ -124,6 +126,10 @@ target_link_libraries(glim
   $<TARGET_NAME_IF_EXISTS:Iridescence::Iridescence>
   ${OpenCV_LIBRARIES}
 )
+get_target_property(_gtsam_points_include_dirs gtsam_points::gtsam_points INTERFACE_INCLUDE_DIRECTORIES)
+if(_gtsam_points_include_dirs)
+  target_include_directories(glim BEFORE PUBLIC ${_gtsam_points_include_dirs})
+endif()
 if(BUILD_WITH_OPENCV)
   target_compile_definitions(glim PUBLIC GLIM_USE_OPENCV)
 endif()
@@ -259,6 +265,10 @@ install(FILES
   "${CMAKE_CURRENT_BINARY_DIR}/glim-config-version.cmake"
   DESTINATION ${CMAKE_CONFIG_INSTALL_DIR}
 )
+
+if(BUILD_GLIM_CLOUD_FUSION)
+  add_subdirectory(glim_cloud_fusion)
+endif()
 
 #################
 ## ROS-related ##
