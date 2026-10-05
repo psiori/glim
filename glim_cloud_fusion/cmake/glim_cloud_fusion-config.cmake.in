@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(glim @PROJECT_VERSION@)
+
+include("${CMAKE_CURRENT_LIST_DIR}/glim_cloud_fusion-targets.cmake")
+
+check_required_components(glim_cloud_fusion)

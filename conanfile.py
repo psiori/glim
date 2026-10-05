@@ -1,5 +1,5 @@
 from conan import ConanFile
-from conan.tools.cmake import CMake, CMakeToolchain, cmake_layout
+from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
 
 
 class GlimConan(ConanFile):
@@ -44,6 +44,8 @@ class GlimConan(ConanFile):
         tc.variables["BUILD_GLIM_CLOUD_FUSION"] = self.options.build_glim_cloud_fusion
         tc.variables["BUILD_GLIM_CLOUD_FUSION_TESTS"] = False
         tc.generate()
+        deps = CMakeDeps(self)
+        deps.generate()
 
     def build(self):
         cmake = CMake(self)
@@ -53,3 +55,16 @@ class GlimConan(ConanFile):
     def package(self):
         cmake = CMake(self)
         cmake.install()
+
+    def package_info(self):
+        self.cpp_info.set_property("cmake_file_name", "glim")
+        self.cpp_info.set_property("cmake_target_name", "glim::glim")
+        if self.options.build_glim_cloud_fusion:
+            self.cpp_info.components["cloud_fusion"].set_property(
+                "cmake_file_name", "glim_cloud_fusion"
+            )
+            self.cpp_info.components["cloud_fusion"].set_property(
+                "cmake_target_name", "glim::cloud_fusion"
+            )
+            self.cpp_info.components["cloud_fusion"].libs = ["glim_cloud_fusion"]
+            self.cpp_info.components["cloud_fusion"].requires = ["glim"]
