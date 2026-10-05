@@ -33,6 +33,10 @@ class GlimConan(ConanFile):
         self.requires("fmt/10.2.1")
         self.requires("opencv/4.10.0")
 
+    def configure(self):
+        self.options["opencv"].with_ffmpeg = False
+        self.options["opencv"].with_gtk = False
+
     def layout(self):
         cmake_layout(self)
 
