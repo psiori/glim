@@ -20,6 +20,7 @@ option(BUILD_WITH_VIEWER "Build with visualizer" ON)
 option(BUILD_GLIM_CLOUD_FUSION "Build glim_cloud_fusion library" ON)
 option(BUILD_GLIM_CLOUD_FUSION_TESTS "Build glim_cloud_fusion tests" ON)
 option(BUILD_WITH_MARCH_NATIVE "Build with -march=native" OFF)
+option(BUILD_WITH_OPENMP "Build with OpenMP support" ON)
 option(BUILD_WITH_OPENCV "Build with OpenCV to support camera images" ON)
 
 if(BUILD_WITH_MARCH_NATIVE)
@@ -33,7 +34,9 @@ find_package(Boost REQUIRED serialization)
 find_package(Eigen3 REQUIRED)
 find_package(GTSAM 4.2 REQUIRED)
 find_package(gtsam_points 1.2.2 REQUIRED)
-find_package(OpenMP REQUIRED)
+if(BUILD_WITH_OPENMP)
+  find_package(OpenMP REQUIRED)
+endif()
 find_package(spdlog REQUIRED)
 
 if(BUILD_WITH_VIEWER)
@@ -121,7 +124,7 @@ target_link_libraries(glim
   Eigen3::Eigen
   gtsam
   gtsam_points::gtsam_points
-  OpenMP::OpenMP_CXX
+  $<TARGET_NAME_IF_EXISTS:OpenMP::OpenMP_CXX>
   spdlog::spdlog
   $<TARGET_NAME_IF_EXISTS:Iridescence::Iridescence>
   ${OpenCV_LIBRARIES}
