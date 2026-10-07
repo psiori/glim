@@ -2,6 +2,37 @@ import os
 
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
+from conan.tools.files import copy
+
+_EXPORT_EXCLUDES = (
+    ".git",
+    ".git/*",
+    "build",
+    "build/*",
+    "build_*",
+    "build_*/*",
+    "install",
+    "install/*",
+    "cmake-build-*",
+    ".cache",
+    ".cache/*",
+    ".vscode",
+    ".idea",
+    "__pycache__",
+    "__pycache__/*",
+    "*.pyc",
+    ".DS_Store",
+    "conanbuild.sh",
+    "conanbuildenv-*",
+    "conanrun.sh",
+    "conanrunenv-*",
+    "deactivate_conanbuild.sh",
+    "deactivate_conanrun.sh",
+    "compile_commands.json",
+    "CMakeUserPresets.json",
+    "output_*.pcd",
+    "output_*.txt",
+)
 
 
 def _set_gtsam_dir(tc, conanfile):
@@ -34,7 +65,9 @@ class GlimConan(ConanFile):
         "build_with_march_native": True,
         "build_glim_cloud_fusion": True,
     }
-    exports_sources = "*"
+
+    def export_sources(self):
+        copy(self, "*", self.recipe_folder, self.export_sources_folder, excludes=_EXPORT_EXCLUDES)
 
     def requirements(self):
         self.requires("gtsam/4.3a1")
