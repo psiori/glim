@@ -1,5 +1,17 @@
+import os
+
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
+
+
+def _set_gtsam_dir(tc, conanfile):
+    try:
+        gtsam = conanfile.dependencies["gtsam"]
+    except (KeyError, AttributeError):
+        return
+    gtsam_dir = os.path.join(gtsam.package_folder, "lib", "cmake", "GTSAM")
+    if os.path.isdir(gtsam_dir):
+        tc.variables["GTSAM_DIR"] = gtsam_dir
 
 
 class GlimConan(ConanFile):
@@ -15,7 +27,7 @@ class GlimConan(ConanFile):
         "build_glim_cloud_fusion": [True, False],
     }
     default_options = {
-        "shared": True,
+        "shared": False,
         "fPIC": True,
         "build_with_viewer": False,
         "build_with_cuda": False,
@@ -31,11 +43,6 @@ class GlimConan(ConanFile):
         self.requires("boost/1.83.0")
         self.requires("fmt/10.2.1", override=True)
         self.requires("spdlog/1.12.0")
-        self.requires("opencv/4.10.0")
-
-    def configure(self):
-        self.options["opencv"].with_ffmpeg = False
-        self.options["opencv"].with_gtk = False
 
     def layout(self):
         cmake_layout(self)
@@ -45,9 +52,10 @@ class GlimConan(ConanFile):
         tc.variables["BUILD_WITH_VIEWER"] = self.options.build_with_viewer
         tc.variables["BUILD_WITH_CUDA"] = self.options.build_with_cuda
         tc.variables["BUILD_WITH_MARCH_NATIVE"] = self.options.build_with_march_native
-        tc.variables["BUILD_WITH_OPENMP"] = False
+        tc.variables["BUILD_WITH_OPENMP"] = True
         tc.variables["BUILD_GLIM_CLOUD_FUSION"] = self.options.build_glim_cloud_fusion
         tc.variables["BUILD_GLIM_CLOUD_FUSION_TESTS"] = False
+        _set_gtsam_dir(tc, self)
         tc.generate()
         deps = CMakeDeps(self)
         deps.generate()

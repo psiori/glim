@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 4.4.0)
 
 add_library(glim_cloud_fusion SHARED
   src/fusion.cpp

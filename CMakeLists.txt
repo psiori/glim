@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 4.4.0)
 project(glim VERSION 1.2.2 LANGUAGES CXX)
 
 add_compile_options(-std=c++17)
@@ -124,10 +124,10 @@ target_link_libraries(glim
   Eigen3::Eigen
   gtsam
   gtsam_points::gtsam_points
-  $<TARGET_NAME_IF_EXISTS:OpenMP::OpenMP_CXX>
   spdlog::spdlog
   $<TARGET_NAME_IF_EXISTS:Iridescence::Iridescence>
   ${OpenCV_LIBRARIES}
+  $<TARGET_NAME_IF_EXISTS:OpenMP::OpenMP_CXX>
 )
 get_target_property(_gtsam_points_include_dirs gtsam_points::gtsam_points INTERFACE_INCLUDE_DIRECTORIES)
 if(_gtsam_points_include_dirs)

@@ -11,6 +11,7 @@ include_guard()
 
 set(BUILD_WITH_CUDA @BUILD_WITH_CUDA@)
 set(BUILD_WITH_VIEWER @BUILD_WITH_VIEWER@)
+set(BUILD_WITH_OPENMP @BUILD_WITH_OPENMP@)
 set(GLIM_USE_OPENCV @GLIM_USE_OPENCV@)
 
 include(CMakeFindDependencyMacro)
@@ -18,7 +19,9 @@ find_dependency(Boost REQUIRED serialization)
 find_dependency(Eigen3 REQUIRED)
 find_dependency(gtsam_points REQUIRED)
 find_dependency(GTSAM REQUIRED)
-find_dependency(OpenMP REQUIRED)
+if(BUILD_WITH_OPENMP)
+  find_dependency(OpenMP REQUIRED)
+endif()
 find_dependency(spdlog REQUIRED)
 
 if(BUILD_WITH_CUDA)
