@@ -1,4 +1,5 @@
-# Keep Conan recipe revisions stable across repeated local builds.
+# Used by `conan config install` only (not `conan create` exports).
+# Recipe exports exclude build artifacts via export_sources() in conanfile.py.
 
 build/
 build_*/
