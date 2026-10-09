@@ -53,6 +53,7 @@ class GlimConan(ConanFile):
         "shared": [True, False],
         "fPIC": [True, False],
         "build_with_viewer": [True, False],
+        "build_with_opencv": [True, False],
         "build_with_cuda": [True, False],
         "build_with_march_native": [True, False],
         "build_glim_cloud_fusion": [True, False],
@@ -61,6 +62,7 @@ class GlimConan(ConanFile):
         "shared": False,
         "fPIC": True,
         "build_with_viewer": False,
+        "build_with_opencv": False,
         "build_with_cuda": False,
         "build_with_march_native": True,
         "build_glim_cloud_fusion": True,
@@ -76,6 +78,13 @@ class GlimConan(ConanFile):
         self.requires("boost/1.83.0")
         self.requires("fmt/10.2.1", override=True)
         self.requires("spdlog/1.12.0")
+        if self.options.build_with_opencv:
+            self.requires("opencv/[>=4.0.0 <5.0.0]")
+
+    def configure(self):
+        if self.options.build_with_opencv:
+            self.options["opencv"].with_ffmpeg = False
+            self.options["opencv"].with_gtk = False
 
     def layout(self):
         cmake_layout(self)
@@ -83,11 +92,13 @@ class GlimConan(ConanFile):
     def generate(self):
         tc = CMakeToolchain(self)
         tc.variables["BUILD_WITH_VIEWER"] = self.options.build_with_viewer
+        tc.variables["BUILD_WITH_OPENCV"] = self.options.build_with_opencv
         tc.variables["BUILD_WITH_CUDA"] = self.options.build_with_cuda
         tc.variables["BUILD_WITH_MARCH_NATIVE"] = self.options.build_with_march_native
         tc.variables["BUILD_WITH_OPENMP"] = True
         tc.variables["BUILD_GLIM_CLOUD_FUSION"] = self.options.build_glim_cloud_fusion
         tc.variables["BUILD_GLIM_CLOUD_FUSION_TESTS"] = False
+        # TODO: really needed?
         _set_gtsam_dir(tc, self)
         tc.generate()
         deps = CMakeDeps(self)
