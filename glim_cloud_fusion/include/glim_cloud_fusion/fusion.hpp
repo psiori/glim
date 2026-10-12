@@ -38,15 +38,17 @@ struct FusionParams {
   ScanTimeParams scan_time;
 };
 
+struct DensePointCloud {
+  std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> points;
+  std::vector<double> intensities;
+};
+
 struct FusionProgress {
   int scan_index = 0;
   int total_scans = 0;
   std::string stage;
-};
-
-struct DensePointCloud {
-  std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> points;
-  std::vector<double> intensities;
+  /// Partial merged cloud for live preview (may be empty if not yet available).
+  DensePointCloud preview_cloud;
 };
 
 struct FusionResult {

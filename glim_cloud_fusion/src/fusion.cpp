@@ -3,9 +3,6 @@
 #include <cmath>
 #include <unordered_map>
 
-#include <glim/mapping/callbacks.hpp>
-#include <glim/mapping/global_mapping.hpp>
-#include <glim/mapping/sub_mapping.hpp>
 #include <glim/odometry/callbacks.hpp>
 #include <glim/odometry/odometry_estimation_ct.hpp>
 #include <glim/preprocess/preprocessed_frame.hpp>
@@ -170,6 +167,14 @@ FusionResult fuse_scans(const std::vector<LidarScan>& scans, const FusionParams&
     }
     result.cloud = voxel_merge(pts, intensities, params.voxel_resolution);
     result.scan_poses.push_back(Eigen::Isometry3d::Identity());
+    if (on_progress) {
+      FusionProgress progress;
+      progress.scan_index = 1;
+      progress.total_scans = 1;
+      progress.stage = "passthrough";
+      progress.preview_cloud = result.cloud;
+      on_progress(progress);
+    }
     return result;
   }
 
@@ -178,17 +183,6 @@ FusionResult fuse_scans(const std::vector<LidarScan>& scans, const FusionParams&
   odom_params.max_correspondence_distance = params.max_correspondence_distance;
   glim::OdometryEstimationCT odom(odom_params);
 
-  glim::SubMappingParams sub_params;
-  sub_params.enable_imu = false;
-  sub_params.enable_gpu = false;
-  sub_params.registration_error_factor_type = "VGICP";
-  glim::SubMapping sub_mapping(sub_params);
-
-  glim::GlobalMappingParams global_params;
-  global_params.enable_imu = false;
-  global_params.enable_gpu = false;
-  glim::GlobalMapping global_mapping(global_params);
-
   struct Snapshot {
     std::vector<Eigen::Vector4d, Eigen::aligned_allocator<Eigen::Vector4d>> points;
     std::vector<double> intensities;
@@ -196,10 +190,24 @@ FusionResult fuse_scans(const std::vector<LidarScan>& scans, const FusionParams&
   };
   std::vector<Snapshot> snapshots;
 
-  for (size_t si = 0; si < scans.size(); ++si) {
-    if (on_progress) {
-      on_progress(FusionProgress{static_cast<int>(si), static_cast<int>(scans.size()), "odometry"});
+  const auto preview_from_snapshots = [&](size_t count) -> DensePointCloud {
+    std::vector<Eigen::Vector4d, Eigen::aligned_allocator<Eigen::Vector4d>> merged_pts;
+    std::vector<double> merged_intensities;
+    const size_t n = std::min(count, snapshots.size());
+    for (size_t si = 0; si < n; ++si) {
+      const auto& snap = snapshots[si];
+      const Eigen::Isometry3d T = snap.T_world_begin;
+      for (size_t i = 0; i < snap.points.size(); ++i) {
+        merged_pts.push_back(T * snap.points[i]);
+        merged_intensities.push_back(snap.intensities[i]);
+      }
     }
+    return voxel_merge(merged_pts, merged_intensities, params.voxel_resolution);
+  };
+
+  const size_t preview_stride = std::max<size_t>(1, scans.size() / 10);
+
+  for (size_t si = 0; si < scans.size(); ++si) {
     std::string err;
     const auto preprocessed = to_preprocessed(scans[si], params, err);
     if (!preprocessed) {
@@ -225,22 +233,19 @@ FusionResult fuse_scans(const std::vector<LidarScan>& scans, const FusionParams&
     }
     snapshots.push_back(std::move(snap));
 
-    for (const auto& marg : marginalized) {
-      sub_mapping.insert_frame(marg);
+    if (on_progress) {
+      FusionProgress progress;
+      progress.scan_index = static_cast<int>(si + 1);
+      progress.total_scans = static_cast<int>(scans.size());
+      progress.stage = "odometry";
+      const bool emit_preview =
+        si == 0 || si + 1 == scans.size() || (si + 1) % preview_stride == 0;
+      if (emit_preview) {
+        progress.preview_cloud = preview_from_snapshots(si + 1);
+      }
+      on_progress(progress);
     }
-    for (const auto& submap : sub_mapping.get_submaps()) {
-      global_mapping.insert_submap(submap);
-    }
   }
-
-  for (const auto& submap : sub_mapping.submit_end_of_sequence()) {
-    global_mapping.insert_submap(submap);
-  }
-
-  if (on_progress) {
-    on_progress(FusionProgress{static_cast<int>(scans.size()), static_cast<int>(scans.size()), "optimize"});
-  }
-  global_mapping.optimize();
 
   std::vector<Eigen::Vector4d, Eigen::aligned_allocator<Eigen::Vector4d>> merged_pts;
   std::vector<double> merged_intensities;
