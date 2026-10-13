@@ -47,7 +47,7 @@ def _set_gtsam_dir(tc, conanfile):
 
 class GlimConan(ConanFile):
     name = "glim"
-    version = "1.2.7"
+    version = "1.2.9"
     settings = "os", "compiler", "build_type", "arch"
     options = {
         "shared": [True, False],

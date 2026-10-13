@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -59,7 +60,7 @@ struct FusionParams {
 
   /// CT-GICP graph weights and LM iterations.
   double location_consistency_inf_scale = 1e-3;
-  double constant_velocity_inf_scale = 1e3;
+  double constant_velocity_inf_scale = 1e5;
   int lm_max_iterations = 10;
 
   /// Fixed-lag pose smoother (iSAM2).
@@ -76,7 +77,7 @@ struct FusionParams {
 
   /// CT integrator (`CtIntegrator` backend): per-scan point cap after voxelized subsampling.
   int target_num_points = 10000;
-  /// Drop deskewed output points closer than this to the sensor origin when accumulating (m). Not iVox insertion spacing.
+  /// Drop points closer than this to the sensor origin in scanner frame before deskew/world transform (m). Not iVox insertion spacing.
   double min_distance = 1.0;
   /// Scan-to-model iVox voxel leaf size (m). vlcal `iVox(1.0, …)`.
   double integrator_ivox_resolution = 1.0;
@@ -85,6 +86,29 @@ struct FusionParams {
   int integrator_ivox_lru_thresh = 100;
   /// Outer LM repeats per scan (vlcal preprocess uses 3).
   int integrator_lm_outer_loops = 3;
+
+  /// Per-scan CT integrator stats on progress callbacks (deskew span, LM cost, poses).
+  bool integrator_debug = false;
+};
+
+struct FusionIntegratorDiagnostics {
+  bool is_seed_scan = false;
+  int num_raw_points = 0;
+  int num_subsample_points = 0;
+  double time_min_s = 0.0;
+  double time_max_s = 0.0;
+  double alpha_min = 0.0;
+  double alpha_max = 0.0;
+  std::size_t target_map_points = 0;
+  std::size_t output_voxel_count = 0;
+  double lm_error_initial = 0.0;
+  double lm_error_final = 0.0;
+  /// Motion within the scan (optimized begin vs end).
+  double scan_begin_end_trans_m = 0.0;
+  double scan_begin_end_rot_deg = 0.0;
+  /// End pose in the integrator odometry frame.
+  double odom_end_trans_m = 0.0;
+  double odom_end_rot_deg = 0.0;
 };
 
 struct DensePointCloud {
@@ -100,6 +124,8 @@ struct FusionProgress {
   double scan_stamp = 0.0;
   /// Partial merged cloud for live preview (may be empty if not yet available).
   DensePointCloud preview_cloud;
+  /// Set when `FusionParams::integrator_debug` and stage is `integrator` or `integrator_seed`.
+  std::optional<FusionIntegratorDiagnostics> integrator;
 };
 
 struct FusionResult {
@@ -124,5 +150,7 @@ bool normalize_lidar_scan_times(
 inline double scan_time_alpha(double t, double scan_duration) {
   return t / std::max(1e-9, scan_duration);
 }
+
+void print_fusion_integrator_diagnostics(std::ostream& out, int scan_index, const FusionIntegratorDiagnostics& d);
 
 }  // namespace glim_cloud_fusion

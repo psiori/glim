@@ -58,6 +58,7 @@ TEST(Fusion, IntegratorMultiScan) {
   glim_cloud_fusion::FusionParams params;
   params.backend = glim_cloud_fusion::FusionBackend::CtIntegrator;
   params.scan_time.time_origin = glim_cloud_fusion::TimeOrigin::FirstPoint;
+  params.scan_time.scan_duration = 0.5;
   params.target_num_points = 500;
   const auto a = make_box_scan(0.0, 0.0);
   const auto b = make_box_scan(0.2, 0.1);

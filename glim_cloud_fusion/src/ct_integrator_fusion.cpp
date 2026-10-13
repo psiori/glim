@@ -2,10 +2,13 @@
 #include "fusion_parallel.hpp"
 #include "integrator_sampling.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <random>
 #include <unordered_map>
 
 #include <gtsam/geometry/Pose3.h>
+#include <gtsam/geometry/Rot3.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/Values.h>
@@ -65,6 +68,7 @@ gtsam_points::PointCloudCPU::Ptr build_source_cloud(
   }
   cloud->points = cloud->points_storage.data();
   cloud->times = cloud->times_storage.data();
+  cloud->num_points = n;
 
   const int k = std::max(2, raw.k_neighbors);
   std::vector<int> neighbors;
@@ -106,12 +110,12 @@ void accumulate_scan(
 #pragma omp for schedule(static)
     for (int ii = 0; ii < n; ++ii) {
       const int idx = time_order[ii];
+      if (raw.points[idx].head<3>().norm() < min_distance) {
+        continue;
+      }
       const double t = raw.times[idx] * inv_dur;
       const gtsam::Pose3 T = T_begin.interpolateRt(T_end, t);
       const Eigen::Vector4d pt = T.matrix() * raw.points[idx];
-      if (pt.head<3>().norm() < min_distance) {
-        continue;
-      }
       const OutputVoxelKey key{
         static_cast<int>(std::floor(pt.x() / voxel_resolution)),
         static_cast<int>(std::floor(pt.y() / voxel_resolution)),
@@ -128,12 +132,12 @@ void accumulate_scan(
 #else
   for (int ii = 0; ii < n; ++ii) {
     const int idx = time_order[ii];
+    if (raw.points[idx].head<3>().norm() < min_distance) {
+      continue;
+    }
     const double t = raw.times[idx] * inv_dur;
     const gtsam::Pose3 T = T_begin.interpolateRt(T_end, t);
     const Eigen::Vector4d pt = T.matrix() * raw.points[idx];
-    if (pt.head<3>().norm() < min_distance) {
-      continue;
-    }
     const OutputVoxelKey key{
       static_cast<int>(std::floor(pt.x() / voxel_resolution)),
       static_cast<int>(std::floor(pt.y() / voxel_resolution)),
@@ -142,6 +146,64 @@ void accumulate_scan(
     voxels[key] = Eigen::Vector4d(pt.x(), pt.y(), pt.z(), intensity);
   }
 #endif
+}
+
+void pose_motion_metrics(
+  const gtsam::Pose3& begin,
+  const gtsam::Pose3& end,
+  double& trans_m,
+  double& rot_deg) {
+  const gtsam::Pose3 delta = begin.between(end);
+  trans_m = delta.translation().norm();
+  const gtsam::Vector3 omega = gtsam::Rot3::Logmap(delta.rotation());
+  rot_deg = omega.norm() * (180.0 / M_PI);
+}
+
+void pose_vs_identity_metrics(const gtsam::Pose3& pose, double& trans_m, double& rot_deg) {
+  trans_m = pose.translation().norm();
+  const gtsam::Vector3 omega = gtsam::Rot3::Logmap(pose.rotation());
+  rot_deg = omega.norm() * (180.0 / M_PI);
+}
+
+void fill_time_alpha_range(
+  const std::vector<double>& times,
+  double scan_duration,
+  FusionIntegratorDiagnostics& diag) {
+  if (times.empty()) {
+    return;
+  }
+  const auto [tmin, tmax] = std::minmax_element(times.begin(), times.end());
+  diag.time_min_s = *tmin;
+  diag.time_max_s = *tmax;
+  diag.alpha_min = scan_time_alpha(diag.time_min_s, scan_duration);
+  diag.alpha_max = scan_time_alpha(diag.time_max_s, scan_duration);
+}
+
+FusionIntegratorDiagnostics make_integrator_diagnostics(
+  const glim::PreprocessedFrame& raw,
+  int subsample_count,
+  double scan_duration,
+  const gtsam::Pose3& begin,
+  const gtsam::Pose3& end,
+  const std::shared_ptr<gtsam_points::iVox>& target_ivox,
+  const OutputVoxelMap& output_voxels,
+  bool is_seed,
+  double lm_error_initial,
+  double lm_error_final) {
+  FusionIntegratorDiagnostics diag;
+  diag.is_seed_scan = is_seed;
+  diag.num_raw_points = static_cast<int>(raw.points.size());
+  diag.num_subsample_points = subsample_count;
+  fill_time_alpha_range(raw.times, scan_duration, diag);
+  if (target_ivox && target_ivox->has_points()) {
+    diag.target_map_points = target_ivox->voxel_points().size();
+  }
+  diag.output_voxel_count = output_voxels.size();
+  diag.lm_error_initial = lm_error_initial;
+  diag.lm_error_final = lm_error_final;
+  pose_motion_metrics(begin, end, diag.scan_begin_end_trans_m, diag.scan_begin_end_rot_deg);
+  pose_vs_identity_metrics(end, diag.odom_end_trans_m, diag.odom_end_rot_deg);
+  return diag;
 }
 
 DensePointCloud dense_from_output_voxels(const OutputVoxelMap& voxels) {
@@ -170,8 +232,9 @@ FusionResult fuse_scans_ct_integrator(
 
   auto target_ivox = std::make_shared<gtsam_points::iVox>(params.integrator_ivox_resolution);
   target_ivox->voxel_insertion_setting().set_min_dist_in_cell(params.integrator_ivox_min_points_dist);
+  // vlcal iVox has no per-cell point cap; gtsam_points defaults to 20.
+  target_ivox->voxel_insertion_setting().set_max_num_points_in_cell(1'000'000);
   target_ivox->set_lru_horizon(params.integrator_ivox_lru_thresh);
-  target_ivox->set_neighbor_voxel_mode(1);
 
   gtsam::Pose3 last_begin = gtsam::Pose3();
   gtsam::Pose3 last_end = gtsam::Pose3();
@@ -226,6 +289,27 @@ FusionResult fuse_scans_ct_integrator(
       accumulate_scan(
         *raw, time_order, last_begin, last_end, scan_duration, params.voxel_resolution, params.min_distance, output_voxels, num_threads);
       result.scan_poses.push_back(Eigen::Isometry3d::Identity());
+      if (on_progress) {
+        FusionProgress progress;
+        progress.scan_index = static_cast<int>(si + 1);
+        progress.total_scans = static_cast<int>(scans.size());
+        progress.stage = "integrator_seed";
+        progress.scan_stamp = scans[si].stamp;
+        if (params.integrator_debug) {
+          progress.integrator = make_integrator_diagnostics(
+            *raw,
+            static_cast<int>(sample.size()),
+            scan_duration,
+            last_begin,
+            last_end,
+            target_ivox,
+            output_voxels,
+            true,
+            0.0,
+            0.0);
+        }
+        on_progress(progress);
+      }
     } else {
       const std::vector<int> sample =
         integrator_randomgrid_subsample_indices(raw->points, raw->times, params.target_num_points, mt);
@@ -264,14 +348,16 @@ FusionResult fuse_scans_ct_integrator(
       gtsam::LevenbergMarquardtParams lm_params;
       lm_params.setMaxIterations(lm_iters);
 
+      const double lm_error_initial = graph.error(values);
       for (int outer = 0; outer < outer_loops; ++outer) {
         values = gtsam::LevenbergMarquardtOptimizer(graph, values, lm_params).optimize();
       }
+      const double lm_error_final = graph.error(values);
 
       last_begin = values.at<gtsam::Pose3>(0);
       last_end = values.at<gtsam::Pose3>(1);
 
-      const auto deskewed = factor->deskewed_source_points(values, true);
+      const auto deskewed = factor->deskewed_source_points(values);
       const int n = static_cast<int>(deskewed.size());
       source->normals_storage.resize(n);
       source->covs_storage.resize(n);
@@ -281,6 +367,7 @@ FusionResult fuse_scans_ct_integrator(
       }
       source->points = source->points_storage.data();
       source->covs = source->covs_storage.data();
+      source->num_points = n;
       target_ivox->insert(*source);
 
       if (on_progress) {
@@ -294,18 +381,30 @@ FusionResult fuse_scans_ct_integrator(
       accumulate_scan(
         *raw, time_order, last_begin, last_end, scan_duration, params.voxel_resolution, params.min_distance, output_voxels, num_threads);
       result.scan_poses.emplace_back(last_begin.matrix());
-    }
-
-    if (on_progress) {
-      FusionProgress progress;
-      progress.scan_index = static_cast<int>(si + 1);
-      progress.total_scans = static_cast<int>(scans.size());
-      progress.stage = (si == 0) ? "integrator_seed" : "integrator";
-      progress.scan_stamp = scans[si].stamp;
-      if (si == 0 || si + 1 == scans.size() || (si + 1) % preview_stride == 0) {
-        progress.preview_cloud = dense_from_output_voxels(output_voxels);
+      if (on_progress) {
+        FusionProgress progress;
+        progress.scan_index = static_cast<int>(si + 1);
+        progress.total_scans = static_cast<int>(scans.size());
+        progress.stage = "integrator";
+        progress.scan_stamp = scans[si].stamp;
+        if (si + 1 == scans.size() || (si + 1) % preview_stride == 0) {
+          progress.preview_cloud = dense_from_output_voxels(output_voxels);
+        }
+        if (params.integrator_debug) {
+          progress.integrator = make_integrator_diagnostics(
+            *raw,
+            static_cast<int>(sample.size()),
+            scan_duration,
+            last_begin,
+            last_end,
+            target_ivox,
+            output_voxels,
+            false,
+            lm_error_initial,
+            lm_error_final);
+        }
+        on_progress(progress);
       }
-      on_progress(progress);
     }
   }
 

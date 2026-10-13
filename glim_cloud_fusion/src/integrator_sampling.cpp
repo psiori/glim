@@ -31,11 +31,16 @@ std::vector<int> integrator_randomgrid_subsample_indices(
   if (n == 0) {
     return {};
   }
+  const auto sort_indices_by_time = [&](std::vector<int>& indices) {
+    std::sort(indices.begin(), indices.end(), [&](int a, int b) { return times[a] < times[b]; });
+  };
+
   if (target_num_points <= 0 || n <= target_num_points) {
     std::vector<int> all(n);
     for (int i = 0; i < n; ++i) {
       all[i] = i;
     }
+    sort_indices_by_time(all);
     return all;
   }
 
@@ -45,6 +50,7 @@ std::vector<int> integrator_randomgrid_subsample_indices(
     for (int i = 0; i < n; ++i) {
       all[i] = i;
     }
+    sort_indices_by_time(all);
     return all;
   }
 
@@ -93,7 +99,7 @@ std::vector<int> integrator_randomgrid_subsample_indices(
     indices = std::move(sub);
   }
 
-  std::sort(indices.begin(), indices.end());
+  sort_indices_by_time(indices);
   return indices;
 }
 

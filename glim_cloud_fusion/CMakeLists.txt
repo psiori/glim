@@ -6,6 +6,7 @@ add_library(glim_cloud_fusion SHARED
   src/fusion_parallel.cpp
   src/integrator_sampling.cpp
   src/ct_integrator_fusion.cpp
+  src/fusion_diagnostics.cpp
 )
 target_include_directories(glim_cloud_fusion PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

@@ -46,7 +46,7 @@ glim::PreprocessedFrame::Ptr to_preprocessed(
   auto frame = glim::PreprocessedFrame::Ptr(new glim::PreprocessedFrame);
   frame->stamp = scan.stamp;
   frame->full_scan_duration = scan_duration;
-  frame->scan_end_time = scan.stamp + norm_times.back();
+  frame->scan_end_time = scan.stamp + scan_duration;
 
   const bool use_mask = !scan.keep.empty();
   for (size_t i = 0; i < scan.points.size(); ++i) {
