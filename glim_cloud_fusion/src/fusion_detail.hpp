@@ -10,7 +10,13 @@
 
 namespace glim_cloud_fusion::detail {
 
-glim::PreprocessedFrame::Ptr to_preprocessed(const LidarScan& scan, const FusionParams& params, std::string& err);
+/// When `compute_full_scan_neighbors` is false (CT integrator), skip kNN on every point;
+/// the integrator subsamples and computes neighbors only on the reduced cloud.
+glim::PreprocessedFrame::Ptr to_preprocessed(
+  const LidarScan& scan,
+  const FusionParams& params,
+  std::string& err,
+  bool compute_full_scan_neighbors = true);
 
 DensePointCloud voxel_merge(
   const std::vector<Eigen::Vector4d, Eigen::aligned_allocator<Eigen::Vector4d>>& points,

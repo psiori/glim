@@ -15,11 +15,18 @@ enum class FusionError { Ok = 0, InvalidArgument, EmptyInput, FusionFailed };
 enum class FusionBackend { CtIntegrator = 0, GlimSlam = 1 };
 
 enum class TimeUnit { Seconds, Nanoseconds };
-enum class TimeOrigin { FirstPoint, ScanStart };
+/// How per-point times in `LidarScan::times` are interpreted before deskew.
+enum class TimeOrigin {
+  /// Subtract the minimum per-point time in the stored scan (first point in the PCD).
+  FirstPoint,
+  /// Times are already relative to a fixed sweep anchor (e.g. rotation start). Do not subtract the first point;
+  /// required when the saved scan omits angular sections but timestamps still count from rotation start.
+  ScanStart
+};
 
 struct ScanTimeParams {
-  TimeUnit time_unit = TimeUnit::Seconds;
-  TimeOrigin time_origin = TimeOrigin::FirstPoint;
+  TimeUnit time_unit = TimeUnit::Nanoseconds;
+  TimeOrigin time_origin = TimeOrigin::ScanStart;
   std::optional<double> scan_duration;
 };
 
@@ -36,12 +43,13 @@ struct LidarScan {
 struct FusionParams {
   FusionBackend backend = FusionBackend::CtIntegrator;
 
-  /// Post-fusion output downsampling (`voxel_merge`); independent of map resolutions.
+  /// Integrator output voxel hash / SLAM `voxel_merge` cell size (m). vlcal `DynamicPointCloudIntegratorParams::voxel_resolution`.
   double voxel_resolution = 0.05;
-  int num_threads = 4;
+  int num_threads = 16;
+  /// CT-GICP max correspondence (m). vlcal factor default when unset.
   double max_correspondence_distance = 1.0;
   /// Neighbors per point for covariance estimation in CT-GICP preprocessing.
-  int k_neighbors = 40;
+  int k_neighbors = 20;
   ScanTimeParams scan_time;
 
   /// iVox scan-to-model map (inside `OdometryEstimationCT`).
@@ -52,7 +60,7 @@ struct FusionParams {
   /// CT-GICP graph weights and LM iterations.
   double location_consistency_inf_scale = 1e-3;
   double constant_velocity_inf_scale = 1e3;
-  int lm_max_iterations = 8;
+  int lm_max_iterations = 10;
 
   /// Fixed-lag pose smoother (iSAM2).
   double smoother_lag = 1.0;
@@ -68,10 +76,12 @@ struct FusionParams {
 
   /// CT integrator (`CtIntegrator` backend): per-scan point cap after voxelized subsampling.
   int target_num_points = 10000;
-  /// Drop accumulated points closer than this to the sensor origin (m).
+  /// Drop deskewed output points closer than this to the sensor origin when accumulating (m). Not iVox insertion spacing.
   double min_distance = 1.0;
-  /// Scan-to-model iVox leaf size during integrator fusion (m).
-  double integrator_ivox_resolution = 0.05;
+  /// Scan-to-model iVox voxel leaf size (m). vlcal `iVox(1.0, …)`.
+  double integrator_ivox_resolution = 1.0;
+  /// Minimum distance between points inserted into the same integrator iVox cell (m). vlcal `iVox(…, 0.05, …)`.
+  double integrator_ivox_min_points_dist = 0.05;
   int integrator_ivox_lru_thresh = 100;
   /// Outer LM repeats per scan (vlcal preprocess uses 3).
   int integrator_lm_outer_loops = 3;
@@ -86,6 +96,8 @@ struct FusionProgress {
   int scan_index = 0;
   int total_scans = 0;
   std::string stage;
+  /// `LidarScan::stamp` for the scan currently being fused (seconds).
+  double scan_stamp = 0.0;
   /// Partial merged cloud for live preview (may be empty if not yet available).
   DensePointCloud preview_cloud;
 };

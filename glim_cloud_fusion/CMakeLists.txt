@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 4.4.0)
 add_library(glim_cloud_fusion SHARED
   src/fusion.cpp
   src/fusion_detail.cpp
+  src/fusion_parallel.cpp
+  src/integrator_sampling.cpp
   src/ct_integrator_fusion.cpp
 )
 target_include_directories(glim_cloud_fusion PUBLIC
@@ -10,6 +12,17 @@ target_include_directories(glim_cloud_fusion PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(glim_cloud_fusion PUBLIC glim)
+if(BUILD_WITH_OPENMP)
+  find_package(OpenMP REQUIRED)
+  target_link_libraries(glim_cloud_fusion PUBLIC OpenMP::OpenMP_CXX)
+  # INTERFACE from OpenMP::OpenMP_CXX does not always propagate to this target's TUs in Conan builds.
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+    target_compile_options(glim_cloud_fusion PRIVATE -Xclang -fopenmp)
+  elseif(OpenMP_CXX_FLAGS)
+    separate_arguments(_glim_cf_omp_flags NATIVE_COMMAND "${OpenMP_CXX_FLAGS}")
+    target_compile_options(glim_cloud_fusion PRIVATE ${_glim_cf_omp_flags})
+  endif()
+endif()
 get_target_property(_gtsam_points_include_dirs gtsam_points::gtsam_points INTERFACE_INCLUDE_DIRECTORIES)
 if(_gtsam_points_include_dirs)
   target_include_directories(glim_cloud_fusion BEFORE PUBLIC ${_gtsam_points_include_dirs})

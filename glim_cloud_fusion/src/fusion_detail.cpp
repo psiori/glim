@@ -1,5 +1,7 @@
 #include "fusion_detail.hpp"
 
+#include "fusion_parallel.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
@@ -30,7 +32,11 @@ struct VoxelAccum {
 
 }  // namespace
 
-glim::PreprocessedFrame::Ptr to_preprocessed(const LidarScan& scan, const FusionParams& params, std::string& err) {
+glim::PreprocessedFrame::Ptr to_preprocessed(
+  const LidarScan& scan,
+  const FusionParams& params,
+  std::string& err,
+  const bool compute_full_scan_neighbors) {
   std::vector<double> norm_times;
   double scan_duration = 0.0;
   if (!normalize_lidar_scan_times(scan, params.scan_time, norm_times, scan_duration, err)) {
@@ -64,15 +70,11 @@ glim::PreprocessedFrame::Ptr to_preprocessed(const LidarScan& scan, const Fusion
 
   const int k_neighbors = std::max(2, params.k_neighbors);
   frame->k_neighbors = k_neighbors;
-  frame->neighbors.resize(frame->points.size() * frame->k_neighbors, 0);
-  if (static_cast<int>(frame->points.size()) >= frame->k_neighbors) {
-    gtsam_points::KdTree tree(frame->points.data(), frame->points.size());
-    for (int i = 0; i < static_cast<int>(frame->points.size()); ++i) {
-      std::vector<size_t> k_indices(frame->k_neighbors);
-      std::vector<double> k_sq_dists(frame->k_neighbors);
-      tree.knn_search(frame->points[i].data(), frame->k_neighbors, k_indices.data(), k_sq_dists.data());
-      std::copy(k_indices.begin(), k_indices.end(), frame->neighbors.begin() + i * frame->k_neighbors);
-    }
+  if (compute_full_scan_neighbors && static_cast<int>(frame->points.size()) >= frame->k_neighbors) {
+    const int n = static_cast<int>(frame->points.size());
+    const int num_threads = fusion_effective_num_threads(params.num_threads);
+    gtsam_points::KdTree tree(frame->points.data(), n);
+    parallel_knn_search(tree, frame->points.data(), n, k_neighbors, frame->neighbors, num_threads);
   }
   return frame;
 }
