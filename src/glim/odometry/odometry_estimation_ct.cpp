@@ -30,25 +30,82 @@ using gtsam::symbol_shorthand::X;
 using gtsam::symbol_shorthand::Y;
 using Callbacks = OdometryEstimationCallbacks;
 
+namespace {
+
+void set_odometry_ct_programmatic_defaults(glim::OdometryEstimationCTParams& params) {
+  params.num_threads = 4;
+  params.max_correspondence_distance = 1.0;
+  params.ivox_resolution = 1.0;
+  params.ivox_min_points_dist = 0.1;
+  params.ivox_lru_thresh = 200;
+  params.location_consistency_inf_scale = 1e-3;
+  params.constant_velocity_inf_scale = 1e3;
+  params.lm_max_iterations = 8;
+  params.smoother_lag = 1.0;
+  params.use_isam2_dogleg = false;
+  params.isam2_relinearize_skip = 1;
+  params.isam2_relinearize_thresh = 0.1;
+  params.compute_covs = false;
+  params.enable_fixed_lag_smoother = true;
+}
+
+void overlay_odometry_ct_config(glim::OdometryEstimationCTParams& params, const Config& config) {
+  const char* module = "odometry_estimation";
+  if (auto v = config.param<int>(module, "num_threads")) {
+    params.num_threads = *v;
+  }
+  if (auto v = config.param<double>(module, "max_correspondence_distance")) {
+    params.max_correspondence_distance = *v;
+  }
+  if (auto v = config.param<double>(module, "ivox_resolution")) {
+    params.ivox_resolution = *v;
+  }
+  if (auto v = config.param<double>(module, "ivox_min_points_dist")) {
+    params.ivox_min_points_dist = *v;
+  }
+  if (auto v = config.param<int>(module, "ivox_lru_thresh")) {
+    params.ivox_lru_thresh = *v;
+  }
+  if (auto v = config.param<double>(module, "location_consistency_inf_scale")) {
+    params.location_consistency_inf_scale = *v;
+  }
+  if (auto v = config.param<double>(module, "constant_velocity_inf_scale")) {
+    params.constant_velocity_inf_scale = *v;
+  }
+  if (auto v = config.param<int>(module, "lm_max_iterations")) {
+    params.lm_max_iterations = *v;
+  }
+  if (auto v = config.param<double>(module, "smoother_lag")) {
+    params.smoother_lag = *v;
+  }
+  if (auto v = config.param<bool>(module, "use_isam2_dogleg")) {
+    params.use_isam2_dogleg = *v;
+  }
+  if (auto v = config.param<int>(module, "isam2_relinearize_skip")) {
+    params.isam2_relinearize_skip = *v;
+  }
+  if (auto v = config.param<double>(module, "isam2_relinearize_thresh")) {
+    params.isam2_relinearize_thresh = *v;
+  }
+  if (auto v = config.param<bool>(module, "compute_covs")) {
+    params.compute_covs = *v;
+  }
+}
+
+Config load_odometry_ct_config_file() {
+  const std::string config_dir = GlobalConfig::instance()->param<std::string>("global", "config_path", ".");
+  return Config(config_dir + "/config_odometry_ct.json");
+}
+
+}  // namespace
+
 OdometryEstimationCTParams::OdometryEstimationCTParams() {
-  Config config(GlobalConfig::get_config_path("config_odometry"));
+  set_odometry_ct_programmatic_defaults(*this);
+  overlay_odometry_ct_config(*this, load_odometry_ct_config_file());
+}
 
-  num_threads = config.param<int>("odometry_estimation", "num_threads", 4);
-  max_correspondence_distance = config.param<double>("odometry_estimation", "max_correspondence_distance", 1.0);
-
-  ivox_resolution = config.param<double>("odometry_estimation", "ivox_resolution", 1.0);
-  ivox_min_points_dist = config.param<double>("odometry_estimation", "ivox_min_points_dist", 0.05);
-  ivox_lru_thresh = config.param<int>("odometry_estimation", "ivox_lru_thresh", 30);
-
-  location_consistency_inf_scale = config.param<double>("odometry_estimation", "location_consistency_inf_scale", 1e-3);
-  constant_velocity_inf_scale = config.param<double>("odometry_estimation", "constant_velocity_inf_scale", 1e-3);
-  lm_max_iterations = config.param<int>("odometry_estimation", "lm_max_iterations", 8);
-
-  smoother_lag = config.param<double>("odometry_estimation", "smoother_lag", 5.0);
-  use_isam2_dogleg = config.param<bool>("odometry_estimation", "use_isam2_dogleg", false);
-  isam2_relinearize_skip = config.param<int>("odometry_estimation", "isam2_relinearize_skip", 1);
-  isam2_relinearize_thresh = config.param<double>("odometry_estimation", "isam2_relinearize_thresh", 0.1);
-  compute_covs = config.param<bool>("odometry_estimation", "compute_covs", false);
+OdometryEstimationCTParams::OdometryEstimationCTParams(FromCaller) {
+  set_odometry_ct_programmatic_defaults(*this);
 }
 
 OdometryEstimationCTParams::~OdometryEstimationCTParams() {}
@@ -66,9 +123,11 @@ OdometryEstimationCT::OdometryEstimationCT(const OdometryEstimationCTParams& par
   if (params.use_isam2_dogleg) {
     isam2_params.setOptimizationParams(gtsam::ISAM2DoglegParams());
   }
-  isam2_params.relinearizeSkip = params.isam2_relinearize_skip;
+  isam2_params.relinearizeSkip = static_cast<int>(params.isam2_relinearize_skip);
   isam2_params.setRelinearizeThreshold(params.isam2_relinearize_thresh);
-  smoother.reset(new FixedLagSmootherExt(params.smoother_lag, isam2_params));
+  if (params.enable_fixed_lag_smoother) {
+    smoother.reset(new FixedLagSmootherExt(params.smoother_lag, isam2_params));
+  }
 
 #ifdef GTSAM_USE_TBB
   tbb_task_arena = std::make_shared<tbb::task_arena>(1);
@@ -81,6 +140,13 @@ OdometryEstimationCT::OdometryEstimationCT(const OdometryEstimationCTParams& par
 }
 
 OdometryEstimationCT::~OdometryEstimationCT() {}
+
+gtsam::Pose3 OdometryEstimationCT::estimate_pose(gtsam::Key key) const {
+  if (params.enable_fixed_lag_smoother) {
+    return smoother->calculateEstimate<gtsam::Pose3>(key);
+  }
+  return scan_poses_.at<gtsam::Pose3>(key);
+}
 
 EstimationFrame::ConstPtr OdometryEstimationCT::insert_frame(const PreprocessedFrame::Ptr& raw_frame, std::vector<EstimationFrame::ConstPtr>& marginalized_frames) {
   Callbacks::on_insert_frame(raw_frame);
@@ -134,7 +200,7 @@ EstimationFrame::ConstPtr OdometryEstimationCT::insert_frame(const PreprocessedF
         logger->warn("there might be a large time gap between point cloud frames");
       } else {
         const double delta_time = (frames[last]->stamp + frames[last]->frame->times[frames[last]->frame->size() - 1]) - frames[last - 1]->stamp;
-        const gtsam::Pose3 delta_pose = smoother->calculateEstimate<gtsam::Pose3>(X(last - 1)).inverse() * smoother->calculateEstimate<gtsam::Pose3>(Y(last));
+        const gtsam::Pose3 delta_pose = estimate_pose(X(last - 1)).inverse() * estimate_pose(Y(last));
         last_twist = 0.85 * gtsam::Pose3::Logmap(delta_pose) / delta_time;
       }
     }
@@ -142,8 +208,8 @@ EstimationFrame::ConstPtr OdometryEstimationCT::insert_frame(const PreprocessedF
     const auto& last_frame = frames[last];
     const double last_time_begin = last_frame->stamp + last_frame->frame->times[0];
     const double last_time_end = last_frame->stamp + last_frame->frame->times[last_frame->frame->size() - 1];
-    const auto last_T_world_lidar_begin_ = smoother->calculateEstimate<gtsam::Pose3>(X(last));
-    const auto last_T_world_lidar_end_ = smoother->calculateEstimate<gtsam::Pose3>(Y(last));
+    const auto last_T_world_lidar_begin_ = estimate_pose(X(last));
+    const auto last_T_world_lidar_end_ = estimate_pose(Y(last));
     const auto last_T_world_lidar_begin = gtsam::Pose3(last_T_world_lidar_begin_.rotation().normalized(), last_T_world_lidar_begin_.translation());
     const auto last_T_world_lidar_end = gtsam::Pose3(last_T_world_lidar_end_.rotation().normalized(), last_T_world_lidar_end_.translation());
 
@@ -241,18 +307,22 @@ EstimationFrame::ConstPtr OdometryEstimationCT::insert_frame(const PreprocessedF
   }
   target_ivox->insert(*transformed);
 
-  // Update smoother
-  Callbacks::on_smoother_update(*smoother, new_factors, new_values, new_stamps);
+  if (params.enable_fixed_lag_smoother) {
+    Callbacks::on_smoother_update(*smoother, new_factors, new_values, new_stamps);
 #ifdef GTSAM_USE_TBB
-  auto arena = static_cast<tbb::task_arena*>(tbb_task_arena.get());
-  arena->execute([&] {
+    auto arena = static_cast<tbb::task_arena*>(tbb_task_arena.get());
+    arena->execute([&] {
 #endif
-    smoother->update(new_factors, new_values, new_stamps);
+      smoother->update(new_factors, new_values, new_stamps);
 #ifdef GTSAM_USE_TBB
-  });
+    });
 #endif
-
-  Callbacks::on_smoother_update_finish(*smoother);
+    Callbacks::on_smoother_update_finish(*smoother);
+  } else {
+    for (const auto& key_value : new_values) {
+      scan_poses_.insert(key_value.key, key_value.value);
+    }
+  }
 
   // Find out marginalized frames
   while (marginalized_cursor < current) {
@@ -270,7 +340,7 @@ EstimationFrame::ConstPtr OdometryEstimationCT::insert_frame(const PreprocessedF
   // Update estimation frames
   for (int i = marginalized_cursor; i < frames.size(); i++) {
     try {
-      Eigen::Isometry3d T_world_lidar = Eigen::Isometry3d(smoother->calculateEstimate<gtsam::Pose3>(X(i)).matrix());
+      Eigen::Isometry3d T_world_lidar = Eigen::Isometry3d(estimate_pose(X(i)).matrix());
       frames[i]->set_T_world_sensor(FrameID::LIDAR, T_world_lidar);
     } catch (std::out_of_range& e) {
       logger->error("caught {}", e.what());
@@ -281,7 +351,7 @@ EstimationFrame::ConstPtr OdometryEstimationCT::insert_frame(const PreprocessedF
     }
   }
 
-  if (params.compute_covs) {
+  if (params.compute_covs && params.enable_fixed_lag_smoother) {
     logger->debug("computing marginal covariances of the latest frame");
     new_frame->cov_computed = true;
     new_frame->pose_cov = smoother->marginalCovariance(X(current));

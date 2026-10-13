@@ -12,6 +12,8 @@ namespace glim_cloud_fusion {
 
 enum class FusionError { Ok = 0, InvalidArgument, EmptyInput, FusionFailed };
 
+enum class FusionBackend { CtIntegrator = 0, GlimSlam = 1 };
+
 enum class TimeUnit { Seconds, Nanoseconds };
 enum class TimeOrigin { FirstPoint, ScanStart };
 
@@ -32,10 +34,47 @@ struct LidarScan {
 };
 
 struct FusionParams {
-  int num_threads = 4;
+  FusionBackend backend = FusionBackend::CtIntegrator;
+
+  /// Post-fusion output downsampling (`voxel_merge`); independent of map resolutions.
   double voxel_resolution = 0.05;
+  int num_threads = 4;
   double max_correspondence_distance = 1.0;
+  /// Neighbors per point for covariance estimation in CT-GICP preprocessing.
+  int k_neighbors = 40;
   ScanTimeParams scan_time;
+
+  /// iVox scan-to-model map (inside `OdometryEstimationCT`).
+  double ivox_resolution = 1.0;
+  double ivox_min_points_dist = 0.1;
+  int ivox_lru_thresh = 200;
+
+  /// CT-GICP graph weights and LM iterations.
+  double location_consistency_inf_scale = 1e-3;
+  double constant_velocity_inf_scale = 1e3;
+  int lm_max_iterations = 8;
+
+  /// Fixed-lag pose smoother (iSAM2).
+  double smoother_lag = 1.0;
+  bool use_isam2_dogleg = false;
+  double isam2_relinearize_skip = 1.0;
+  double isam2_relinearize_thresh = 0.1;
+
+  /// Marginal covariances on latest frame (debug; does not change fused cloud).
+  bool compute_covs = false;
+
+  /// iSAM2 fixed-lag smoother (off by default for batch fusion; snapshots use per-scan LM poses).
+  bool enable_fixed_lag_smoother = false;
+
+  /// CT integrator (`CtIntegrator` backend): per-scan point cap after voxelized subsampling.
+  int target_num_points = 10000;
+  /// Drop accumulated points closer than this to the sensor origin (m).
+  double min_distance = 1.0;
+  /// Scan-to-model iVox leaf size during integrator fusion (m).
+  double integrator_ivox_resolution = 0.05;
+  int integrator_ivox_lru_thresh = 100;
+  /// Outer LM repeats per scan (vlcal preprocess uses 3).
+  int integrator_lm_outer_loops = 3;
 };
 
 struct DensePointCloud {

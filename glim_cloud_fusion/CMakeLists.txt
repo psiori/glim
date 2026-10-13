@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 4.4.0)
 
 add_library(glim_cloud_fusion SHARED
   src/fusion.cpp
+  src/fusion_detail.cpp
+  src/ct_integrator_fusion.cpp
 )
 target_include_directories(glim_cloud_fusion PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

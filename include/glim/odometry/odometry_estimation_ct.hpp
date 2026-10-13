@@ -6,9 +6,8 @@
 
 #include <glim/odometry/odometry_estimation_base.hpp>
 
-namespace gtsam {
-class Values;
-}
+#include <gtsam/geometry/Pose3.h>
+#include <gtsam/nonlinear/Values.h>
 
 namespace gtsam_points {
 struct FlatContainer;
@@ -31,7 +30,11 @@ class CloudCovarianceEstimation;
  */
 struct OdometryEstimationCTParams {
 public:
+  /// Construct with defaults from config_odometry_ct.json when present (no warnings for missing keys).
   OdometryEstimationCTParams();
+  /// Construct without reading GLIM JSON; for callers that supply every field (e.g. glim_cloud_fusion).
+  struct FromCaller {};
+  explicit OdometryEstimationCTParams(FromCaller);
   ~OdometryEstimationCTParams();
 
 public:
@@ -52,6 +55,9 @@ public:
   double isam2_relinearize_skip;
   double isam2_relinearize_thresh;
   bool compute_covs;  ///< If true, compute marginal covariances of the latest frame.
+
+  /// When false, use per-scan LM poses only (for offline batch fusion; no iSAM2).
+  bool enable_fixed_lag_smoother = true;
 };
 
 /**
@@ -82,6 +88,9 @@ private:
   // Optimizer
   using FixedLagSmootherExt = gtsam_points::IncrementalFixedLagSmootherExtWithFallback;
   std::unique_ptr<FixedLagSmootherExt> smoother;
+  gtsam::Values scan_poses_;
+
+  gtsam::Pose3 estimate_pose(gtsam::Key key) const;
 
   std::shared_ptr<void> tbb_task_arena;
 };
