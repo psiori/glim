@@ -15,3 +15,5 @@ deactivate_conanbuild.sh
 deactivate_conanrun.sh
 output_map.pcd
 output_trajectory.txt
+glim_ros.cpp
+pcd_mapper/
