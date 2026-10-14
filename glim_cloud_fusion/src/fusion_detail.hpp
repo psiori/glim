@@ -43,11 +43,13 @@ glim::GlobalMappingParams global_mapping_params_from_fusion(const FusionParams& 
 FusionResult fuse_scans_slam_mapping(
   const std::vector<LidarScan>& scans,
   const FusionParams& params,
-  FusionCallback on_progress);
+  FusionCallback on_progress,
+  FusionCancellationCheck is_cancelled);
 
 FusionResult fuse_scans_ct_integrator(
   const std::vector<LidarScan>& scans,
   const FusionParams& params,
-  FusionCallback on_progress);
+  FusionCallback on_progress,
+  FusionCancellationCheck is_cancelled);
 
 }  // namespace glim_cloud_fusion::detail

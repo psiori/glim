@@ -11,7 +11,7 @@
 
 namespace glim_cloud_fusion {
 
-enum class FusionError { Ok = 0, InvalidArgument, EmptyInput, FusionFailed };
+enum class FusionError { Ok = 0, InvalidArgument, EmptyInput, FusionFailed, Cancelled };
 
 enum class FusionBackend { CtIntegrator = 0, GlimSlam = 1 };
 
@@ -164,8 +164,25 @@ struct FusionResult {
 };
 
 using FusionCallback = std::function<void(const FusionProgress&)>;
+/// When set, return true if the caller should stop fusion as soon as practical.
+using FusionCancellationCheck = std::function<bool()>;
 
-FusionResult fuse_scans(const std::vector<LidarScan>& scans, const FusionParams& params, FusionCallback on_progress = nullptr);
+inline bool fusion_cancel_requested(const FusionCancellationCheck& is_cancelled) {
+  return static_cast<bool>(is_cancelled) && is_cancelled();
+}
+
+inline FusionResult fusion_make_cancelled_result() {
+  FusionResult result;
+  result.error = FusionError::Cancelled;
+  result.message = "cancelled";
+  return result;
+}
+
+FusionResult fuse_scans(
+  const std::vector<LidarScan>& scans,
+  const FusionParams& params,
+  FusionCallback on_progress = nullptr,
+  FusionCancellationCheck is_cancelled = nullptr);
 
 /// Normalize per-point times to seconds from the chosen origin. Returns false on invalid input.
 bool normalize_lidar_scan_times(

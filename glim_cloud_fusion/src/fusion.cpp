@@ -38,8 +38,15 @@ bool normalize_lidar_scan_times(
   return true;
 }
 
-FusionResult fuse_scans(const std::vector<LidarScan>& scans, const FusionParams& params, FusionCallback on_progress) {
+FusionResult fuse_scans(
+  const std::vector<LidarScan>& scans,
+  const FusionParams& params,
+  FusionCallback on_progress,
+  FusionCancellationCheck is_cancelled) {
   FusionResult result;
+  if (fusion_cancel_requested(is_cancelled)) {
+    return fusion_make_cancelled_result();
+  }
   if (scans.empty()) {
     result.error = FusionError::EmptyInput;
     result.message = "no scans";
@@ -76,10 +83,10 @@ FusionResult fuse_scans(const std::vector<LidarScan>& scans, const FusionParams&
   }
 
   if (params.backend == FusionBackend::CtIntegrator) {
-    return detail::fuse_scans_ct_integrator(scans, params, on_progress);
+    return detail::fuse_scans_ct_integrator(scans, params, on_progress, is_cancelled);
   }
 
-  return detail::fuse_scans_slam_mapping(scans, params, on_progress);
+  return detail::fuse_scans_slam_mapping(scans, params, on_progress, is_cancelled);
 }
 
 }  // namespace glim_cloud_fusion

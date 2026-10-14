@@ -222,8 +222,12 @@ DensePointCloud dense_from_output_voxels(const OutputVoxelMap& voxels) {
 FusionResult fuse_scans_ct_integrator(
   const std::vector<LidarScan>& scans,
   const FusionParams& params,
-  FusionCallback on_progress) {
+  FusionCallback on_progress,
+  FusionCancellationCheck is_cancelled) {
   FusionResult result;
+  if (fusion_cancel_requested(is_cancelled)) {
+    return fusion_make_cancelled_result();
+  }
   const int num_threads = fusion_effective_num_threads(params.num_threads);
 #ifdef _OPENMP
   omp_set_num_threads(num_threads);
@@ -246,6 +250,9 @@ FusionResult fuse_scans_ct_integrator(
   const int lm_iters = std::max(1, params.lm_max_iterations);
 
   for (size_t si = 0; si < scans.size(); ++si) {
+    if (fusion_cancel_requested(is_cancelled)) {
+      return fusion_make_cancelled_result();
+    }
     if (on_progress) {
       FusionProgress start_progress;
       start_progress.scan_index = static_cast<int>(si + 1);
@@ -350,6 +357,9 @@ FusionResult fuse_scans_ct_integrator(
 
       const double lm_error_initial = graph.error(values);
       for (int outer = 0; outer < outer_loops; ++outer) {
+        if (fusion_cancel_requested(is_cancelled)) {
+          return fusion_make_cancelled_result();
+        }
         values = gtsam::LevenbergMarquardtOptimizer(graph, values, lm_params).optimize();
       }
       const double lm_error_final = graph.error(values);

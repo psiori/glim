@@ -160,8 +160,12 @@ glim::GlobalMappingParams global_mapping_params_from_fusion(const FusionParams& 
 FusionResult fuse_scans_slam_mapping(
   const std::vector<LidarScan>& scans,
   const FusionParams& params,
-  FusionCallback on_progress) {
+  FusionCallback on_progress,
+  FusionCancellationCheck is_cancelled) {
   FusionResult result;
+  if (fusion_cancel_requested(is_cancelled)) {
+    return fusion_make_cancelled_result();
+  }
 
   glim::OdometryEstimationCTParams odom_params = odometry_params_from_fusion(params);
   if (params.slam_mapping.enable_odometry_smoother) {
@@ -200,6 +204,9 @@ FusionResult fuse_scans_slam_mapping(
   odom_frames_by_scan.reserve(scans.size());
 
   for (size_t si = 0; si < scans.size(); ++si) {
+    if (fusion_cancel_requested(is_cancelled)) {
+      return fusion_make_cancelled_result();
+    }
     if (on_progress) {
       FusionProgress progress;
       progress.scan_index = static_cast<int>(si + 1);
@@ -252,6 +259,10 @@ FusionResult fuse_scans_slam_mapping(
     }
   }
 
+  if (fusion_cancel_requested(is_cancelled)) {
+    return fusion_make_cancelled_result();
+  }
+
   std::vector<glim::SubMap::Ptr> submaps;
   if (sub_mapping) {
     if (on_progress) {
@@ -273,6 +284,10 @@ FusionResult fuse_scans_slam_mapping(
     return result;
   }
 
+  if (fusion_cancel_requested(is_cancelled)) {
+    return fusion_make_cancelled_result();
+  }
+
   std::vector<Eigen::Isometry3d> submap_origin_before_global;
   if (global_mapping) {
     if (on_progress) {
@@ -290,6 +305,9 @@ FusionResult fuse_scans_slam_mapping(
       global_mapping->find_overlapping_submaps(params.slam_mapping.global_min_implicit_loop_overlap);
     }
     global_mapping->optimize();
+    if (fusion_cancel_requested(is_cancelled)) {
+      return fusion_make_cancelled_result();
+    }
   }
 
   struct ScanPose {
@@ -323,6 +341,10 @@ FusionResult fuse_scans_slam_mapping(
     const auto& odom_frame = odom_frames_by_scan[si];
     scan_poses[si].begin = odom_frame->T_world_sensor();
     scan_poses[si].end = odom_frame->T_world_lidar_end;
+  }
+
+  if (fusion_cancel_requested(is_cancelled)) {
+    return fusion_make_cancelled_result();
   }
 
   OutputVoxelMap output_voxels;
