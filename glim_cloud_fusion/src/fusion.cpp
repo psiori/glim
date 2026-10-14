@@ -3,9 +3,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include <glim/odometry/callbacks.hpp>
-#include <glim/odometry/odometry_estimation_ct.hpp>
-
 #include "fusion_detail.hpp"
 
 namespace glim_cloud_fusion {
@@ -82,86 +79,7 @@ FusionResult fuse_scans(const std::vector<LidarScan>& scans, const FusionParams&
     return detail::fuse_scans_ct_integrator(scans, params, on_progress);
   }
 
-  const glim::OdometryEstimationCTParams odom_params = detail::odometry_params_from_fusion(params);
-  glim::OdometryEstimationCT odom(odom_params);
-
-  struct Snapshot {
-    std::vector<Eigen::Vector4d, Eigen::aligned_allocator<Eigen::Vector4d>> points;
-    std::vector<double> intensities;
-    Eigen::Isometry3d T_world_begin = Eigen::Isometry3d::Identity();
-  };
-  std::vector<Snapshot> snapshots;
-
-  const auto preview_from_snapshots = [&](size_t count) -> DensePointCloud {
-    std::vector<Eigen::Vector4d, Eigen::aligned_allocator<Eigen::Vector4d>> merged_pts;
-    std::vector<double> merged_intensities;
-    const size_t n = std::min(count, snapshots.size());
-    for (size_t si = 0; si < n; ++si) {
-      const auto& snap = snapshots[si];
-      const Eigen::Isometry3d T = snap.T_world_begin;
-      for (size_t i = 0; i < snap.points.size(); ++i) {
-        merged_pts.push_back(T * snap.points[i]);
-        merged_intensities.push_back(snap.intensities[i]);
-      }
-    }
-    return detail::voxel_merge(merged_pts, merged_intensities, params.voxel_resolution);
-  };
-
-  const size_t preview_stride = std::max<size_t>(1, scans.size() / 10);
-
-  for (size_t si = 0; si < scans.size(); ++si) {
-    std::string err;
-    const auto preprocessed = detail::to_preprocessed(scans[si], params, err);
-    if (!preprocessed) {
-      result.error = FusionError::InvalidArgument;
-      result.message = err;
-      return result;
-    }
-
-    std::vector<glim::EstimationFrame::ConstPtr> marginalized;
-    const auto odom_frame = odom.insert_frame(preprocessed, marginalized);
-
-    Snapshot snap;
-    if (odom_frame && odom_frame->frame) {
-      snap.T_world_begin = odom_frame->T_world_sensor();
-      for (int i = 0; i < odom_frame->frame->size(); ++i) {
-        snap.points.push_back(odom_frame->frame->points[i]);
-        double intensity = 0.0;
-        if (preprocessed->intensities.size() == static_cast<size_t>(odom_frame->frame->size())) {
-          intensity = preprocessed->intensities[i];
-        }
-        snap.intensities.push_back(intensity);
-      }
-    }
-    snapshots.push_back(std::move(snap));
-
-    if (on_progress) {
-      FusionProgress progress;
-      progress.scan_index = static_cast<int>(si + 1);
-      progress.total_scans = static_cast<int>(scans.size());
-      progress.stage = "odometry";
-      const bool emit_preview =
-        si == 0 || si + 1 == scans.size() || (si + 1) % preview_stride == 0;
-      if (emit_preview) {
-        progress.preview_cloud = preview_from_snapshots(si + 1);
-      }
-      on_progress(progress);
-    }
-  }
-
-  std::vector<Eigen::Vector4d, Eigen::aligned_allocator<Eigen::Vector4d>> merged_pts;
-  std::vector<double> merged_intensities;
-  for (const auto& snap : snapshots) {
-    const Eigen::Isometry3d T = snap.T_world_begin;
-    for (size_t i = 0; i < snap.points.size(); ++i) {
-      merged_pts.push_back(T * snap.points[i]);
-      merged_intensities.push_back(snap.intensities[i]);
-    }
-  }
-
-  result.cloud = detail::voxel_merge(merged_pts, merged_intensities, params.voxel_resolution);
-  result.error = FusionError::Ok;
-  return result;
+  return detail::fuse_scans_slam_mapping(scans, params, on_progress);
 }
 
 }  // namespace glim_cloud_fusion

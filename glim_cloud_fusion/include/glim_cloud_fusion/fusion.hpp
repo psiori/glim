@@ -41,6 +41,32 @@ struct LidarScan {
   int height = 0;
 };
 
+/// GLIM sub-mapping + global mapping options for `FusionBackend::GlimSlam`.
+struct SlamMappingParams {
+  bool enable_sub_mapping = true;
+  bool enable_global_mapping = true;
+  /// Run CT odometry fixed-lag ISAM2 before sub-mapping (poses fed to the mapper).
+  bool enable_odometry_smoother = true;
+  /// Finalize and optimize a submap once this many **keyframes** are accumulated (not scans).
+  /// When the cap is hit during the scan loop, that submap is optimized immediately; global mapping still runs once at the end.
+  int submap_max_num_keyframes = 500;
+  /// `OVERLAP` or `DISPLACEMENT`: when to add another keyframe **inside** the active submap (does not split submaps).
+  std::string keyframe_update_strategy = "OVERLAP";
+  /// OVERLAP strategy: add a keyframe when scan/keyframe overlap drops below this (0–1). Higher → fewer keyframes.
+  double max_keyframe_overlap = 0.6;
+  double keyframe_update_interval_trans = 0.25;
+  double keyframe_update_interval_rot = 0.15;
+  double submap_downsample_resolution = 0.05;
+  double global_min_implicit_loop_overlap = 0.2;
+  double global_max_implicit_loop_distance = 50.0;
+  /// Cap CT odometry fixed-lag ISAM2 window (s). 0 disables the cap (full trajectory lag when smoother is on).
+  double odometry_smoother_lag_cap = 8.0;
+  /// CT odometry registration point cap per scan (0 = use `FusionParams::target_num_points`).
+  int odometry_target_num_points = 0;
+  /// If false, deskew merge subsamples each scan to `target_num_points` (faster export).
+  bool export_full_resolution = true;
+};
+
 struct FusionParams {
   FusionBackend backend = FusionBackend::CtIntegrator;
 
@@ -89,6 +115,8 @@ struct FusionParams {
 
   /// Per-scan CT integrator stats on progress callbacks (deskew span, LM cost, poses).
   bool integrator_debug = false;
+
+  SlamMappingParams slam_mapping;
 };
 
 struct FusionIntegratorDiagnostics {

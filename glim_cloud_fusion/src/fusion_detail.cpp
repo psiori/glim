@@ -1,6 +1,9 @@
 #include "fusion_detail.hpp"
 
 #include "fusion_parallel.hpp"
+#include "integrator_sampling.hpp"
+
+#include <random>
 
 #include <algorithm>
 #include <cmath>
@@ -75,6 +78,48 @@ glim::PreprocessedFrame::Ptr to_preprocessed(
     const int num_threads = fusion_effective_num_threads(params.num_threads);
     gtsam_points::KdTree tree(frame->points.data(), n);
     parallel_knn_search(tree, frame->points.data(), n, k_neighbors, frame->neighbors, num_threads);
+  }
+  return frame;
+}
+
+glim::PreprocessedFrame::Ptr subsample_preprocessed_with_neighbors(
+  const glim::PreprocessedFrame& full,
+  int target_num_points,
+  int k_neighbors,
+  int num_threads,
+  std::mt19937& mt,
+  const bool compute_neighbors) {
+  const std::vector<int> sample_indices =
+    integrator_randomgrid_subsample_indices(full.points, full.times, target_num_points, mt);
+  if (sample_indices.size() < 10) {
+    return nullptr;
+  }
+
+  auto frame = glim::PreprocessedFrame::Ptr(new glim::PreprocessedFrame);
+  frame->stamp = full.stamp;
+  frame->full_scan_duration = full.full_scan_duration;
+  frame->scan_end_time = full.scan_end_time;
+  frame->k_neighbors = std::max(2, k_neighbors);
+  frame->points.reserve(sample_indices.size());
+  frame->times.reserve(sample_indices.size());
+  if (!full.intensities.empty()) {
+    frame->intensities.reserve(sample_indices.size());
+  }
+  for (const int idx : sample_indices) {
+    frame->points.push_back(full.points[idx]);
+    frame->times.push_back(full.times[idx]);
+    if (!full.intensities.empty()) {
+      frame->intensities.push_back(full.intensities[idx]);
+    }
+  }
+
+  if (compute_neighbors) {
+    const int n = static_cast<int>(frame->points.size());
+    if (n >= frame->k_neighbors) {
+      const int nt = fusion_effective_num_threads(num_threads);
+      gtsam_points::KdTree tree(frame->points.data(), n);
+      parallel_knn_search(tree, frame->points.data(), n, frame->k_neighbors, frame->neighbors, nt);
+    }
   }
   return frame;
 }
