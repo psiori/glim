@@ -79,6 +79,27 @@ GlobalMappingParams::GlobalMappingParams() {
 
 GlobalMappingParams::~GlobalMappingParams() {}
 
+GlobalMappingParams::GlobalMappingParams(FromCaller)
+  : enable_gpu(false),
+    enable_imu(false),
+    enable_optimization(true),
+    enable_between_factors(true),
+    between_registration_type("GICP"),
+    registration_error_factor_type("VGICP"),
+    submap_voxel_resolution(0.5),
+    submap_voxel_resolution_max(1.0),
+    submap_voxel_resolution_dmin(5.0),
+    submap_voxel_resolution_dmax(20.0),
+    submap_voxelmap_levels(2),
+    submap_voxelmap_scaling_factor(2.0),
+    randomsampling_rate(0.2),
+    max_implicit_loop_distance(50.0),
+    min_implicit_loop_overlap(0.2),
+    use_isam2_dogleg(false),
+    isam2_relinearize_skip(1),
+    isam2_relinearize_thresh(0.1),
+    init_pose_damping_scale(1e10) {}
+
 GlobalMapping::GlobalMapping(const GlobalMappingParams& params) : params(params) {
 #ifndef GTSAM_POINTS_USE_CUDA
   if (params.enable_gpu) {

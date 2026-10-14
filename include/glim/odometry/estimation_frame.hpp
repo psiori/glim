@@ -87,6 +87,8 @@ public:
 
   Eigen::Isometry3d T_lidar_imu;         ///< LiDAR-IMU transformation
   Eigen::Isometry3d T_world_lidar;       ///< LiDAR pose in the world space
+  /// LiDAR pose at scan end (CT odometry); used for deskewing when scan begin is `T_world_lidar`.
+  Eigen::Isometry3d T_world_lidar_end = Eigen::Isometry3d::Identity();
   Eigen::Isometry3d T_world_imu;         ///< IMU pose in the world space
   Eigen::Vector3d v_world_imu;           ///< IMU velocity in the world frame
   Eigen::Matrix<double, 6, 1> imu_bias;  ///< IMU bias

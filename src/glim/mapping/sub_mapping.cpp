@@ -73,6 +73,27 @@ SubMappingParams::SubMappingParams() {
 
 SubMappingParams::~SubMappingParams() {}
 
+SubMappingParams::SubMappingParams(FromCaller)
+  : enable_gpu(false),
+    enable_imu(false),
+    enable_optimization(true),
+    max_num_keyframes(500),
+    keyframe_update_strategy("OVERLAP"),
+    keyframe_update_min_points(500),
+    keyframe_update_interval_rot(0.15),
+    keyframe_update_interval_trans(0.25),
+    max_keyframe_overlap(0.6),
+    create_between_factors(true),
+    between_registration_type("GICP"),
+    registration_error_factor_type("VGICP"),
+    keyframe_randomsampling_rate(0.2),
+    keyframe_voxel_resolution(0.25),
+    keyframe_voxelmap_levels(2),
+    keyframe_voxelmap_scaling_factor(2.0),
+    submap_downsample_resolution(0.05),
+    submap_voxel_resolution(0.5),
+    submap_target_num_points(-1) {}
+
 SubMapping::SubMapping(const SubMappingParams& params) : params(params) {
   submap_count = 0;
   imu_integration.reset(new IMUIntegration);
@@ -113,8 +134,15 @@ void SubMapping::insert_frame(const EstimationFrame::ConstPtr& odom_frame_) {
   EstimationFrame::Ptr odom_frame = delayed_input_queue.front()->clone();
   delayed_input_queue.pop_front();
   EstimationFrame::ConstPtr next_frame = delayed_input_queue.front();
+  process_odom_frame(std::move(odom_frame), next_frame);
+}
 
+void SubMapping::process_odom_frame(EstimationFrame::Ptr odom_frame, const EstimationFrame::ConstPtr& next_for_imu) {
   if (params.enable_imu) {
+    if (!next_for_imu) {
+      logger->warn("sub_mapping IMU enabled but no next frame for trajectory smoothing; skipping IMU deskew for this frame");
+    } else {
+    const EstimationFrame::ConstPtr& next_frame = next_for_imu;
     logger->debug("smoothing trajectory");
     // Smoothing IMU-based pose estimation
     gtsam::NavState nav_world_imu(gtsam::Pose3(odom_frame->T_world_imu.matrix()), odom_frame->v_world_imu);
@@ -158,6 +186,7 @@ void SubMapping::insert_frame(const EstimationFrame::ConstPtr& odom_frame_) {
       const Eigen::Vector3d trans(imu_pose.translation());
       const Eigen::Quaterniond quat(imu_pose.rotation().toQuaternion());
       odom_frame->imu_rate_trajectory.col(i) << imu_stamps[i], trans, quat.x(), quat.y(), quat.z(), quat.w();
+    }
     }
   }
 
@@ -466,8 +495,12 @@ SubMap::Ptr SubMapping::create_submap(bool force_create) const {
     EstimationFrame::Ptr frame(new EstimationFrame);
     *frame = *odom_frames[i];
 
-    const Eigen::Isometry3d T_world_sensor(values->at<gtsam::Pose3>(X(i)).matrix());
-    frame->set_T_world_sensor(odom_frames[i]->frame_id, T_world_sensor);
+    const Eigen::Isometry3d T_world_begin(values->at<gtsam::Pose3>(X(i)).matrix());
+    const Eigen::Isometry3d T_begin_odom = odom_frames[i]->T_world_sensor();
+    const Eigen::Isometry3d T_end_odom = odom_frames[i]->T_world_lidar_end;
+    const Eigen::Isometry3d delta_scan = T_begin_odom.inverse() * T_end_odom;
+    frame->set_T_world_sensor(odom_frames[i]->frame_id, T_world_begin);
+    frame->T_world_lidar_end = T_world_begin * delta_scan;
 
     if (params.enable_imu) {
       frame->v_world_imu = values->at<gtsam::Vector3>(V(i));
@@ -507,6 +540,16 @@ std::vector<SubMap::Ptr> SubMapping::get_submaps() {
 }
 
 std::vector<SubMap::Ptr> SubMapping::submit_end_of_sequence() {
+  while (!delayed_input_queue.empty()) {
+    EstimationFrame::Ptr odom_frame = delayed_input_queue.front()->clone();
+    delayed_input_queue.pop_front();
+    EstimationFrame::ConstPtr next_for_imu;
+    if (!delayed_input_queue.empty()) {
+      next_for_imu = delayed_input_queue.front();
+    }
+    process_odom_frame(std::move(odom_frame), next_for_imu);
+  }
+
   std::vector<SubMap::Ptr> submaps;
   if (!odom_frames.empty()) {
     auto new_submap = create_submap(true);

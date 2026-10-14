@@ -181,6 +181,7 @@ EstimationFrame::ConstPtr OdometryEstimationCT::insert_frame(const PreprocessedF
 
   if (current == 0) {
     new_frame->set_T_world_sensor(FrameID::LIDAR, Eigen::Isometry3d::Identity());
+    new_frame->T_world_lidar_end = Eigen::Isometry3d::Identity();
 
     new_stamps[X(0)] = new_frame->stamp;
     new_stamps[Y(0)] = new_frame->stamp;
@@ -267,6 +268,7 @@ EstimationFrame::ConstPtr OdometryEstimationCT::insert_frame(const PreprocessedF
 
     new_frame->v_world_imu = (T_world_lidar_begin.translation() - last_T_world_lidar_begin.translation()) / (current_time_begin - last_time_begin);
     new_frame->set_T_world_sensor(FrameID::LIDAR, Eigen::Isometry3d(values.at<gtsam::Pose3>(X(current)).matrix()));
+    new_frame->T_world_lidar_end = Eigen::Isometry3d(values.at<gtsam::Pose3>(Y(current)).matrix());
 
     // Deskew the input points and covs
     auto deskewed_points = factor->deskewed_source_points(values, true);
@@ -342,6 +344,7 @@ EstimationFrame::ConstPtr OdometryEstimationCT::insert_frame(const PreprocessedF
     try {
       Eigen::Isometry3d T_world_lidar = Eigen::Isometry3d(estimate_pose(X(i)).matrix());
       frames[i]->set_T_world_sensor(FrameID::LIDAR, T_world_lidar);
+      frames[i]->T_world_lidar_end = Eigen::Isometry3d(estimate_pose(Y(i)).matrix());
     } catch (std::out_of_range& e) {
       logger->error("caught {}", e.what());
       logger->error("current={}", current);

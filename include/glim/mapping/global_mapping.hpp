@@ -25,7 +25,9 @@ class IMUIntegration;
  */
 struct GlobalMappingParams {
 public:
+  struct FromCaller {};
   GlobalMappingParams();
+  explicit GlobalMappingParams(FromCaller);
   ~GlobalMappingParams();
 
 public:

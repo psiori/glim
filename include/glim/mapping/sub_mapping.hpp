@@ -22,7 +22,9 @@ class CloudCovarianceEstimation;
  */
 struct SubMappingParams {
 public:
+  struct FromCaller {};
   SubMappingParams();
+  explicit SubMappingParams(FromCaller);
   ~SubMappingParams();
 
 public:
@@ -68,6 +70,9 @@ public:
 
 private:
   void insert_keyframe(const int current, const EstimationFrame::ConstPtr& odom_frame);
+
+  /// Integrate one odometry frame into the active submap graph (`next_for_imu` required when IMU is enabled).
+  void process_odom_frame(EstimationFrame::Ptr odom_frame, const EstimationFrame::ConstPtr& next_for_imu);
 
   SubMap::Ptr create_submap(bool force_create = false) const;
 
